@@ -763,14 +763,22 @@ extension UIDevice {
             // iPhone 16 Pro
             "iPhone17,1": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
                            UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
+            "iPhone17,1-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 51, left: 0, bottom: 28, right: 0),
+                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
             // iPhone 16 Pro Max
             "iPhone17,2": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
                            UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
+            "iPhone17,2-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 54, left: 0, bottom: 31, right: 0),
+                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
             // iPhone 16
             "iPhone17,3": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
                            UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
+            "iPhone17,3-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 60, left: 0, bottom: 28, right: 0),
+                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
             // iPhone 16 Plus
             "iPhone17,4": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
+                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
+            "iPhone17,4-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 53, left: 0, bottom: 30, right: 0),
                            UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
             // iPhone 15
             "iPhone15,4": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
