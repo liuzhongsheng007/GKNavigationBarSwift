@@ -18,7 +18,7 @@ extension UINavigationController: GKChildAwakeProtocol {
     }
     
     @objc func gkNav_pushViewController(_ viewController: UIViewController, animated: Bool) {
-        if self.gk_openSystemNavHandle {
+        if self.gk_openSystemNavHandle && !self.gk_usesSystemNavigationBar {
             self.isNavigationBarHidden = true
         }
         gkNav_pushViewController(viewController, animated: animated)
@@ -27,10 +27,28 @@ extension UINavigationController: GKChildAwakeProtocol {
 
 extension UINavigationController {
     fileprivate struct AssociatedKeys {
+        static var gkUsesSystemNavigationBar: Void?
         static var gkOpenSystemNavHandle: Void?
         static var gkHideNavigationBar: Void?
     }
     
+    /// Use container-managed bars so UIKit can place controls on either axis.
+    /// Defaults to true on iOS 27.1+. Set before configuring/pushing controllers.
+    /// Set false only for an explicitly horizontal custom-bar presentation.
+    public var gk_usesSystemNavigationBar: Bool {
+        get {
+            if let value = gk_getAssociatedObject(self, &AssociatedKeys.gkUsesSystemNavigationBar) as? Bool {
+                return value
+            }
+            if #available(iOS 27.1, *) { return true }
+            return false
+        }
+        set {
+            gk_setAssociatedObject(self, &AssociatedKeys.gkUsesSystemNavigationBar, newValue)
+            topViewController?.viewIfLoaded?.setNeedsLayout()
+        }
+    }
+
     public var gk_openSystemNavHandle: Bool {
         get {
             guard let obj = gk_getAssociatedObject(self, &AssociatedKeys.gkOpenSystemNavHandle) as? Bool else { return false }

@@ -548,7 +548,8 @@ extension UIDevice {
     public static func navBarHeight(in controller: UIViewController) -> CGFloat {
         guard let view = controller.viewIfLoaded,
               let bar = navigationBar(in: controller) else { return 0 }
-        return bar.sizeThatFits(CGSize(width: view.bounds.width, height: 0)).height
+        let width = bar is GKNavigationBar ? GKNavigationBar.horizontalContentBounds(in: view).width : view.bounds.width
+        return bar.sizeThatFits(CGSize(width: width, height: 0)).height
     }
 
     @available(*, deprecated, message: "Use navBarHeight(in:) for the current layout.")

@@ -67,10 +67,27 @@ open class GKNavigationBar: UINavigationBar {
         return sizeThatFits(CGSize(width: size.width, height: 0)).height
     }
 
+    static func horizontalContentBounds(in view: UIView) -> CGRect {
+        guard let window = view.window else { return view.bounds }
+        if #available(iOS 11.0, *) {
+            let safe = window.bounds.inset(by: window.safeAreaInsets)
+            let converted = view.convert(safe, from: window)
+            let left = min(view.bounds.maxX, max(view.bounds.minX, converted.minX))
+            let right = max(left, min(view.bounds.maxX, converted.maxX))
+            return CGRect(x: left, y: view.bounds.minY, width: right - left, height: view.bounds.height)
+        }
+        return view.bounds
+    }
+
     func gk_layoutFrame(in view: UIView) -> CGRect {
-        return CGRect(x: view.bounds.minX, y: view.bounds.minY,
-                      width: view.bounds.width,
-                      height: Self.topInset(in: view) + gk_contentHeight(for: view.bounds.size))
+        let content = Self.horizontalContentBounds(in: view)
+        return CGRect(x: content.minX, y: view.bounds.minY,
+                      width: content.width,
+                      height: Self.topInset(in: view) + gk_contentHeight(for: content.size))
+    }
+
+    open override var isHidden: Bool {
+        didSet { viewController?.gk_updateContainerBar() }
     }
 
     static func topInset(in view: UIView) -> CGFloat {

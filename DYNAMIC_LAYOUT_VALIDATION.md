@@ -54,9 +54,9 @@ physical device identity caches remain. No CI redesign or deployment-target incr
 
 - P0: build and run XCTest on Xcode 27.1; tests were authored but not executed here.
 - P0: iOS 27.1 vertical bars and side status area require simulator/device acceptance.
-  This patch retains a custom horizontal UINavigationBar and private UIKit subview
-  positioning; it does not implement a vertical navigation system. Side-only insets
-  are not converted to fake top padding, but button avoidance still needs visual QA.
+  iOS 27.1+ navigation controllers now default to container-managed bars. Standalone
+  bars cannot opt into the system vertical layout. Custom fallback bars now avoid
+  both side insets. Verify the native horizontal/vertical/mixed controls in Device Hub.
 - P1: confirm UIKit sizeThatFits and existing private subview overrides agree on every
   supported OS, including iPad and dynamic status bar changes.
 - P1: legacy context-free APIs cannot identify an intended scene when several are active;
@@ -68,7 +68,7 @@ Reference: https://developer.apple.com/iphone-duo/prepare/ (read 2026-10-28).
 
 ## Follow-up regression coverage
 
-Six XCTest methods now cover repeated window dimensions, owning-window changes,
+Regression tests now cover repeated window dimensions, owning-window changes,
 zero/side insets, current fitting widths, identical sheet/fullscreen fitting, public
 controller overloads, and absence of unintended bar creation. The sheet test uses
 width-dependent stub fitting to detect any reintroduced 56pt or model-height branch;
@@ -78,3 +78,29 @@ Compatibility changes requiring consumer review: portrait aliases now report cur
 layout, not predicted portrait geometry; no-context height APIs return zero if the
 existing bar/window cannot be identified; tabBarHeight returns the actual laid-out
 vertical extent (not a promise that a future vertical bar is horizontal).
+
+## Container-managed bars (follow-up)
+
+Apple explicitly states that standalone UINavigationBar controls do not adapt to the
+vertical axis: https://developer.apple.com/documentation/uikit/uinavigationbar
+
+- UINavigationController.gk_usesSystemNavigationBar defaults to true on iOS 27.1+;
+  earlier OS versions keep the custom bar. Set this before configuring/pushing screens.
+  Explicit false retains a horizontal custom bar, with side-safe bounds.
+- In native mode GK's navigationItem getter returns the controller's real navigationItem.
+  Pre-attachment title, titleView, prompt and button settings are migrated once. Reacquire
+  gk_navigationItem after attachment instead of retaining the standalone item reference.
+- The standalone bar becomes an appearance configuration source and is detached; UIKit's
+  container owns control frames, axis, transitions and content safe area. GK background,
+  shadow/title appearance and visibility forward to the native item/bar. Normal UIKit-only
+  controllers are not reconfigured. Modern private margin swizzling is disabled.
+- Direct manipulation of custom bar subviews, its frame, and its items array is not a
+  container-mode API. Use gk_navigationItem / navigationItem and appearance properties.
+- Background alpha forwards for solid colors and zero transparency. Fractional opacity
+  of background images/blur is not equivalent to the legacy private background-view alpha;
+  validate such custom effects or supply an appropriately transparent background image.
+- Tests added for one-time item migration, post-attachment title/appearance changes,
+  hide/show forwarding, absence of a duplicate custom bar, unaffected UIKit-only screens,
+  and side-safe bounds including containers already inside the safe area.
+- Remaining: run compilation/XCTest and Device Hub acceptance. No device-specific or
+  orientation-based vertical geometry is fabricated in this implementation.

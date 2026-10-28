@@ -93,6 +93,65 @@ final class GKNavigationBarSwiftTests: XCTestCase {
         XCTAssertTrue(controller.view.subviews.isEmpty)
     }
 
+    @available(iOS 11.0, *)
+    func testSideInsetsLimitCustomBarWithoutDoubleApplyingInsets() {
+        let window = InsetsWindow(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
+        let view = UIView(frame: window.bounds)
+        window.addSubview(view)
+        let bar = GKNavigationBar(frame: .zero)
+        for insets in [UIEdgeInsets(top: 0, left: 62, bottom: 0, right: 0),
+                       UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 62),
+                       UIEdgeInsets(top: 0, left: 44, bottom: 21, right: 44), .zero] {
+            window.testInsets = insets
+            view.frame = window.bounds
+            let frame = bar.gk_layoutFrame(in: view)
+            XCTAssertEqual(frame.minX, insets.left)
+            XCTAssertEqual(frame.width, 800 - insets.left - insets.right)
+            view.frame = window.bounds.inset(by: insets)
+            let alreadySafe = bar.gk_layoutFrame(in: view)
+            XCTAssertEqual(alreadySafe.minX, 0)
+            XCTAssertEqual(alreadySafe.width, view.bounds.width)
+        }
+    }
+
+    @available(iOS 13.0, *)
+    func testContainerModeMigratesItemsAndRemovesStandaloneBar() {
+        let controller = UIViewController()
+        controller.loadViewIfNeeded()
+        let item = controller.gk_navigationItem
+        item.title = "Before attachment"
+        let button = UIBarButtonItem(title: "Action", style: .plain, target: nil, action: nil)
+        item.rightBarButtonItem = button
+        let custom = controller.gk_navigationBar
+        let nav = UINavigationController(rootViewController: controller)
+        nav.gk_usesSystemNavigationBar = true
+        controller.gk_updateContainerBar()
+        XCTAssertTrue(controller.gk_navigationItem === controller.navigationItem)
+        XCTAssertEqual(controller.navigationItem.title, "Before attachment")
+        XCTAssertTrue(controller.navigationItem.rightBarButtonItem === button)
+        XCTAssertNil(custom.superview)
+        XCTAssertNil(custom.items)
+        controller.gk_navTitle = "After attachment"
+        XCTAssertEqual(controller.navigationItem.title, "After attachment")
+        custom.isHidden = true
+        XCTAssertTrue(nav.isNavigationBarHidden)
+        custom.isHidden = false
+        XCTAssertFalse(nav.isNavigationBarHidden)
+        controller.gk_navBackgroundColor = .red
+        XCTAssertEqual(controller.navigationItem.standardAppearance?.backgroundColor, .red)
+        XCTAssertNil(controller.gk_navigationBar.superview)
+    }
+
+    func testContainerModeDoesNotConfigureUnrelatedUIKitScreens() {
+        let controller = UIViewController()
+        let nav = UINavigationController(rootViewController: controller)
+        nav.gk_usesSystemNavigationBar = true
+        nav.setNavigationBarHidden(true, animated: false)
+        controller.gk_updateContainerBar()
+        XCTAssertTrue(nav.isNavigationBarHidden)
+        XCTAssertTrue(controller.gk_navigationItem === controller.navigationItem)
+    }
+
     func testBarSizingReadsCurrentContainerWidth() {
         final class SizingBar: GKNavigationBar {
             override func sizeThatFits(_ size: CGSize) -> CGSize {

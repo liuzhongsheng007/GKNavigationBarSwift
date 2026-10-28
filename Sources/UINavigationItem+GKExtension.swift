@@ -88,6 +88,8 @@ extension NSObject: GKObjectAwakeProtocol {
     // MARK: - 重新系统方法
     private static let onceToken = UUID().uuidString
     public static func gkObjectAwake() {
+        // New container-managed bars own their layout. Do not swizzle their internals.
+        if #available(iOS 27.1, *) { return }
         DispatchQueue.once(token: onceToken) {
             if #available(iOS 11.0, *) {
                 let oriSels = ["_UINavigationBarContentView": "layoutSubviews", "_UINavigationBarContentViewLayout": "_updateMarginConstraints"]

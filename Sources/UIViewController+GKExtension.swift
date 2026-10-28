@@ -11,6 +11,7 @@ import UIKit
 extension UIViewController: GKAwakeProtocol {
    
     fileprivate struct AssociatedKeys {
+        static var gkContainerAppearanceSource: Void?
         static var gkNavBarAlpha: Void?
         static var gkNavBarInit: Void?
         static var gkNavBarAdded: Void?
@@ -53,6 +54,7 @@ extension UIViewController: GKAwakeProtocol {
             gk_setAssociatedObject(self, &AssociatedKeys.gkNavBarAlpha, newValue)
             
             self.gk_navigationBar.gk_navBarBackgroundAlpha = newValue
+            gk_updateContainerBar(updateAppearance: true)
         }
     }
     
@@ -87,7 +89,7 @@ extension UIViewController: GKAwakeProtocol {
                 self.gk_navigationBar = navigationBar!
             }
             
-            if self.isViewLoaded && !self.gk_navBarAdded {
+            if self.isViewLoaded && !self.gk_navBarAdded && !gk_usesContainerBar {
                 self.view.addSubview(navigationBar!)
                 self.gk_navBarAdded = true
             }
@@ -106,6 +108,10 @@ extension UIViewController: GKAwakeProtocol {
     
     public var gk_navigationItem: UINavigationItem {
         get {
+            if gk_usesContainerBar {
+                gk_migrateNavigationItem()
+                return navigationItem
+            }
             var item = gk_getAssociatedObject(self, &AssociatedKeys.gkNavigationItem) as? UINavigationItem
             if item == nil {
                 item = UINavigationItem()
@@ -116,7 +122,11 @@ extension UIViewController: GKAwakeProtocol {
         set {
             gk_setAssociatedObject(self, &AssociatedKeys.gkNavigationItem, newValue)
             
-            self.gk_navigationBar.items = [newValue]
+            if gk_usesContainerBar {
+                gk_migrateNavigationItem()
+            } else {
+                self.gk_navigationBar.items = [newValue]
+            }
         }
     }
     
@@ -489,7 +499,7 @@ extension UIViewController {
             }
             
             // 将自定义的导航栏放置顶层
-            if !self.gk_navigationBar.isHidden {
+            if !gk_usesContainerBar && !self.gk_navigationBar.isHidden {
                 self.view.bringSubviewToFront(self.gk_navigationBar)
             }
         }else {
@@ -672,6 +682,7 @@ extension UIViewController {
     }
     
     fileprivate func shouldFixItemSpace() -> Bool {
+        if gk_usesContainerBar { return false }
         if self.gk_navBarInit {
             if self.isKind(of: UINavigationController.self) {
                 return false
@@ -691,6 +702,10 @@ extension UIViewController {
     }
     
     fileprivate func hiddenSystemNavBar() {
+        if gk_usesContainerBar {
+            gk_updateContainerBar()
+            return
+        }
         if let nav = self.navigationController, nav.isNavigationBarHidden == false {
             nav.gk_hideNavigationBar = true
             nav.isNavigationBarHidden = true
@@ -764,8 +779,68 @@ extension UIViewController {
         self.gk_navTitle = nil
     }
     
+    var gk_usesContainerBar: Bool {
+        return navigationController?.gk_usesSystemNavigationBar == true && parent === navigationController
+    }
+
+    private func gk_migrateNavigationItem() {
+        guard let old = gk_getAssociatedObject(self, &AssociatedKeys.gkNavigationItem) as? UINavigationItem else { return }
+        if old !== navigationItem {
+            navigationItem.title = old.title
+            navigationItem.titleView = old.titleView
+            navigationItem.prompt = old.prompt
+            navigationItem.leftBarButtonItems = old.leftBarButtonItems
+            navigationItem.rightBarButtonItems = old.rightBarButtonItems
+            navigationItem.backBarButtonItem = old.backBarButtonItem
+            navigationItem.hidesBackButton = old.hidesBackButton
+            navigationItem.leftItemsSupplementBackButton = old.leftItemsSupplementBackButton
+        }
+        gk_setAssociatedObject(self, &AssociatedKeys.gkNavigationItem, nil)
+    }
+
+    func gk_updateContainerBar(updateAppearance: Bool = false) {
+        guard gk_usesContainerBar, let nav = navigationController else { return }
+        gk_migrateNavigationItem()
+        // Do not create a custom bar for ordinary UIKit-only screens.
+        guard let bar = gk_getAssociatedObject(self, &AssociatedKeys.gkNavigationBar) as? GKNavigationBar else { return }
+        if bar.items != nil { bar.items = nil }
+        if bar.superview != nil { bar.removeFromSuperview() }
+        gk_navBarAdded = false
+        // Configure the controller's own item, so adjacent screens can differ.
+        let previousSource = gk_getAssociatedObject(self, &AssociatedKeys.gkContainerAppearanceSource) as? GKNavigationBar
+        if #available(iOS 13.0, *), updateAppearance || previousSource !== bar {
+            func appearance(_ source: UINavigationBarAppearance?) -> UINavigationBarAppearance? {
+                guard let result = source?.copy() as? UINavigationBarAppearance else { return nil }
+                if let color = result.backgroundColor {
+                    result.backgroundColor = color.withAlphaComponent(color.cgColor.alpha * gk_navBarAlpha)
+                }
+                if gk_navBarAlpha == 0 { result.configureWithTransparentBackground() }
+                return result
+            }
+            navigationItem.standardAppearance = appearance(bar.standardAppearance)
+            navigationItem.scrollEdgeAppearance = appearance(bar.scrollEdgeAppearance)
+            navigationItem.compactAppearance = appearance(bar.compactAppearance)
+            if #available(iOS 15.0, *) {
+                navigationItem.compactScrollEdgeAppearance = appearance(bar.compactScrollEdgeAppearance)
+            }
+        }
+        gk_setAssociatedObject(self, &AssociatedKeys.gkContainerAppearanceSource, bar)
+        if nav.topViewController === self && nav.isNavigationBarHidden != bar.isHidden {
+            nav.setNavigationBarHidden(bar.isHidden, animated: false)
+        }
+    }
+
     fileprivate func setupNavBarFrame() {
         let bar = self.gk_navigationBar
+        if gk_usesContainerBar {
+            gk_updateContainerBar()
+            return
+        }
+        if bar.superview == nil {
+            view.addSubview(bar)
+            gk_navBarAdded = true
+            if bar.items?.isEmpty != false { bar.items = [navigationItem] }
+        }
         bar.gk_nonFullScreen = isNonFullScreen()
         bar.frame = bar.gk_layoutFrame(in: view)
         self.gk_navigationBar.gk_statusBarHidden = self.gk_statusBarHidden
@@ -908,6 +983,7 @@ extension UIViewController {
             }
             gk_navigationBar.setBackgroundImage(bgImage, for: .default)
         }
+        gk_updateContainerBar(updateAppearance: true)
     }
     
     fileprivate func setNavShadow(_ image: UIImage?, color: UIColor?) {
@@ -929,6 +1005,7 @@ extension UIViewController {
             }
             gk_navigationBar.shadowImage = shadowImage
         }
+        gk_updateContainerBar(updateAppearance: true)
     }
     
     fileprivate func setNavTitle(_ attr: [NSAttributedString.Key: Any]) {
@@ -940,5 +1017,6 @@ extension UIViewController {
         }else {
             gk_navigationBar.titleTextAttributes = attr
         }
+        gk_updateContainerBar(updateAppearance: true)
     }
 }
