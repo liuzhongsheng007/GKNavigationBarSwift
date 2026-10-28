@@ -62,7 +62,7 @@ extension UIScrollView {
             let state = gesture.state
             
             // 设置手势滑动的位置距离屏幕左边的区域
-            let locationDistance = UIScreen.main.bounds.size.width
+            let locationDistance = bounds.width
             if state == .began || state == .possible {
                 let location = gesture.location(in: self)
                 if point.x > 0 && location.x < locationDistance && contentOffset.x <= 0 {

@@ -17,6 +17,7 @@ let package = Package(
             name: "GKNavigationBarSwift",
             path: "Sources",
             resources: [.process("GKNavigationBarSwift.bundle")]
-        )
+        ),
+        .testTarget(name: "GKNavigationBarSwiftTests", dependencies: ["GKNavigationBarSwift"])
     ]
 )

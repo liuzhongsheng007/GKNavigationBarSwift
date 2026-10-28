@@ -765,31 +765,9 @@ extension UIViewController {
     }
     
     fileprivate func setupNavBarFrame() {
-        let isNonFullScreen = isNonFullScreen()
-        var navBarH: CGFloat = 0.0
-        
-        if UIDevice.isIPad { // iPad
-            if isNonFullScreen {
-                navBarH = UIDevice.navBarHeightNonFullScreen()
-                self.gk_navigationBar.gk_nonFullScreen = true
-            }else {
-                navBarH = UIDevice.navBarFullHeight()
-            }
-        }else if UIDevice.isLandScape() { // 横屏不显示状态栏，没有非全屏模式
-            if gk_isLandscape() {
-                navBarH = UIDevice.navBarFullHeight()
-            }else {
-                navBarH = UIDevice.navBarFullHeightForPortrait()
-            }
-        }else {
-            if isNonFullScreen {
-                navBarH = UIDevice.navBarHeightNonFullScreen()
-                self.gk_navigationBar.gk_nonFullScreen = true
-            }else {
-                navBarH = UIDevice.navBarFullHeight()
-            }
-        }
-        self.gk_navigationBar.frame = CGRect(x: 0, y: 0, width: self.view.bounds.width, height: navBarH)
+        let bar = self.gk_navigationBar
+        bar.gk_nonFullScreen = isNonFullScreen()
+        bar.frame = bar.gk_layoutFrame(in: view)
         self.gk_navigationBar.gk_statusBarHidden = self.gk_statusBarHidden
         self.gk_navigationBar.layoutSubviews()
     }

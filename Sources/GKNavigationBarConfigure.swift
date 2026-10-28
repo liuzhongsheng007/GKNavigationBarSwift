@@ -202,7 +202,7 @@ open class GKNavigationBarConfigure : NSObject {
     open func getCapture(with view: UIView?) -> UIImage? {
         guard let view else { return nil }
         if view.bounds.size.width <= 0 || view.bounds.size.height <= 0 { return nil }
-        UIGraphicsBeginImageContextWithOptions(view.bounds.size, false, UIScreen.main.scale)
+        UIGraphicsBeginImageContextWithOptions(view.bounds.size, false, view.traitCollection.displayScale)
         view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
         let image = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
@@ -500,26 +500,9 @@ extension UIDevice {
     }()
     
     /// 带物理凹槽的刘海屏或使用 Home Indicator 类型的设备
-    public static let isNotchedScreen: Bool = {
-        if #available(iOS 11.0, *) {
-            var window = keyWindow()
-            if window == nil {
-                // keyWindow还没有创建时，通过创建临时window获取安全区域
-                window = UIWindow(frame: UIScreen.main.bounds)
-                if window!.safeAreaInsets.bottom <= 0 {
-                    let viewController = UIViewController()
-                    window?.rootViewController = viewController
-                }
-            }
-            
-            if window!.safeAreaInsets.bottom > 0 {
-                return true
-            }
-        } else {
-            return false
-        }
-        return false
-    }()
+    public static var isNotchedScreen: Bool {
+        return safeAreaInsets().bottom > 0
+    }
     
     // 是否是带灵动岛的屏幕
     //"iPhone15,2" : "iPhone 14 Pro",
@@ -546,361 +529,121 @@ extension UIDevice {
     
     /// 是否是横屏
     public static func isLandScape() -> Bool {
-        return UIApplication.shared.statusBarOrientation.isLandscape
+        guard let window = keyWindow() else { return false }
+        return window.bounds.width > window.bounds.height
     }
     
     public static func statusBarNavBarHeight() -> CGFloat {
         return navBarFullHeight()
     }
     
-    /// 导航栏高度（无状态栏）
+    // These compatibility APIs describe the current layout, never a hypothetical
+    // portrait/device size. Without an owning controller they use a unique key window.
+    // No window/bar means no measurable height, so return zero rather than guess.
     public static func navBarHeight() -> CGFloat {
-        if isIPad {
-            return version >= 12.0 ? 50 : 44
-        }else {
-            if isLandScape() {
-                return isRegularScreen() ? 44 : 32
-            }else {
-                return 44
-            }
-        }
+        guard let controller = currentLayoutController() else { return 0 }
+        return navBarHeight(in: controller)
     }
-    
-    /// 导航栏竖屏高度（无状态栏）
+
+    public static func navBarHeight(in controller: UIViewController) -> CGFloat {
+        guard let view = controller.viewIfLoaded,
+              let bar = navigationBar(in: controller) else { return 0 }
+        return bar.sizeThatFits(CGSize(width: view.bounds.width, height: 0)).height
+    }
+
+    @available(*, deprecated, message: "Use navBarHeight(in:) for the current layout.")
     public static func navBarHeightForPortrait() -> CGFloat {
-        if isIPad {
-            return version >= 12.0 ? 50 : 44
-        }else {
-            return 44
-        }
+        return navBarHeight()
     }
-    
-    /// 非全屏时的导航栏高度
+
     public static func navBarHeightNonFullScreen() -> CGFloat {
-        return 56
+        return navBarHeight()
     }
-    
-    /// 导航栏完整高度（状态栏+导航栏），状态栏隐藏时只有导航栏高度
+
     public static func navBarFullHeight() -> CGFloat {
-        let deviceModel = deviceModel
-        let pixelOne = 1.0 / UIScreen.main.scale
-        var result = statusBarFullHeight()
-        if isIPad {
-            result += 50
-        }else if isLandScape() {
-            result += isRegularScreen() ? 44 : 32
-        }else {
-            result += 44
-            if deviceModel == "iPhone17,1" || deviceModel == "iPhone17,2" { // 16 Pro / 16 Pro Max
-                result += (2 + pixelOne) // 56.333
-            }else if isDynamicIslandScreen() {
-                result -= pixelOne // 53.667
-            }
-        }
-        return result
+        guard let controller = currentLayoutController() else { return 0 }
+        return navBarFullHeight(in: controller)
     }
-    
-    /// 竖屏导航栏完整高度（状态栏+导航栏）
+
+    public static func navBarFullHeight(in controller: UIViewController) -> CGFloat {
+        guard let view = controller.viewIfLoaded,
+              navigationBar(in: controller) != nil else { return 0 }
+        return GKNavigationBar.topInset(in: view) + navBarHeight(in: controller)
+    }
+
+    @available(*, deprecated, message: "Use navBarFullHeight(in:) for the current layout.")
     public static func navBarFullHeightForPortrait() -> CGFloat {
-        let deviceModel = deviceModel
-        let pixelOne = 1.0 / UIScreen.main.scale
-        var result = statusBarHeightForPortrait()
-        if isIPad {
-            result += 50
-        }else {
-            result += 44
-            if deviceModel == "iPhone17,1" || deviceModel == "iPhone17,2" { // 16 Pro / 16 Pro Max
-                result += (2 + pixelOne) // 56.333
-            }else if isDynamicIslandScreen() {
-                result -= pixelOne // 53.667
-            }
-        }
-        return result
+        return navBarFullHeight()
     }
-    
-    /// 状态栏完整高度，隐藏时为0
+
     public static func statusBarFullHeight() -> CGFloat {
-        if !UIApplication.shared.isStatusBarHidden {
-            return statusBarFrame().height
-        }
-        if isIPad {
-            return isNotchedScreen ? 24 : 20
-        }
-        if !isNotchedScreen {
-            return 20
-        }
-        if isLandScape() {
-            return 0
-        }
-        return statusBarHeightForPortrait()
+        return statusBarFrame().height
     }
-    
-    /// 竖屏状态栏高度
+
+    @available(*, deprecated, message: "Use statusBarFullHeight() for the current scene.")
     public static func statusBarHeightForPortrait() -> CGFloat {
-        if isIPad {
-            return isNotchedScreen ? 24 : 20
-        }
-        if !isNotchedScreen {
-            return 20
-        }
-        if deviceModel == "iPhone12,1" { // iPhone 13 Mini
-            return 48
-        }
-        if isDynamicIslandScreen() {
-            return 54
-        }
-        if is61InchScreenAndiPhone12Later || is67InchScreen {
-            return 47
-        }
-        // iPhone XR/11 在iOS14之后状态栏高度为48，之前为44
-        if is61InchScreen {
-            if #available(iOS 14.0, *) {
-                return 48
-            }else {
-                return 44
-            }
-        }
-        return (is54InchScreen && version >= 15.0) ? 50 : 44
+        return statusBarFullHeight()
     }
-    
+
     public static func tabBarHeight() -> CGFloat {
-        var tabBarHeight: CGFloat = 0
-        if isIPad {
-            if isNotchedScreen {
-                tabBarHeight = 65
-            }else {
-                if version >= 12.0 {
-                    tabBarHeight = 50
-                }else {
-                    tabBarHeight = 49
-                }
-            }
-        }else {
-            if isLandScape() {
-                if isRegularScreen() {
-                    tabBarHeight = 49
-                }else {
-                    tabBarHeight = 32
-                }
-            }else {
-                tabBarHeight = 49
-            }
-            tabBarHeight += safeAreaInsertsForDeviceWithNotch().bottom
-        }
-        return tabBarHeight
+        guard let controller = currentLayoutController(),
+              let tab = controller as? UITabBarController ?? controller.tabBarController else { return 0 }
+        // Use UIKit's laid-out extent (including safe area), with no model corrections.
+        return tab.tabBar.isHidden ? 0 : tab.tabBar.bounds.height
     }
-    
+
+    private static func currentLayoutController() -> UIViewController? {
+        return keyWindow()?.rootViewController?.gk_findCurrentViewController(true)
+    }
+
+    private static func navigationBar(in controller: UIViewController) -> UINavigationBar? {
+        // Inspect existing views only: accessing gk_navigationBar would create a bar.
+        if let custom = controller.viewIfLoaded?.subviews.compactMap({ $0 as? GKNavigationBar }).first {
+            return custom
+        }
+        return (controller as? UINavigationController ?? controller.navigationController)?.navigationBar
+    }
+
+    /// Context-free compatibility API. Prefer the overload with the owning view.
     public static func safeAreaInsets() -> UIEdgeInsets {
-        var safeAreaInsets = UIEdgeInsets.zero
-        if #available(iOS 11.0, *) {
-            var window = keyWindow()
-            if window == nil {
-                // keyWindow还没有创建时，通过创建临时window获取安全区域
-                window = UIWindow(frame: UIScreen.main.bounds)
-                if window!.safeAreaInsets.bottom <= 0 {
-                    let viewController = UIViewController()
-                    window?.rootViewController = viewController
-                }
-            }
-            safeAreaInsets = window!.safeAreaInsets
-        }
-        return safeAreaInsets
+        if #available(iOS 11.0, *) { return keyWindow()?.safeAreaInsets ?? .zero }
+        return .zero
     }
-    
+
+    public static func safeAreaInsets(in view: UIView) -> UIEdgeInsets {
+        if #available(iOS 11.0, *) { return view.safeAreaInsets }
+        return .zero
+    }
+
+    public static func layoutSize(in view: UIView) -> CGSize {
+        return view.bounds.size
+    }
+
     public static func statusBarFrame() -> CGRect {
-        var statusBarFrame = CGRect.zero
         if #available(iOS 13.0, *) {
-            statusBarFrame = keyWindow()?.windowScene?.statusBarManager?.statusBarFrame ?? .zero
+            // Zero is valid when hidden. Do not substitute another scene or a guessed height.
+            return keyWindow()?.windowScene?.statusBarManager?.statusBarFrame ?? .zero
         }
-        
-        if statusBarFrame == .zero {
-            statusBarFrame = UIApplication.shared.statusBarFrame
-        }
-        
-        if statusBarFrame == .zero {
-            let statusBarH = isNotchedScreen ? 44 : 20
-            statusBarFrame = CGRect(x: 0, y: 0, width: Int(UIScreen.main.bounds.size.width), height: statusBarH)
-        }
-        
-        return statusBarFrame
+        return UIApplication.shared.statusBarFrame
     }
-    
+
     public static func keyWindow() -> UIWindow? {
-        var window: UIWindow?
         if #available(iOS 13.0, *) {
-            window = UIApplication.shared.connectedScenes
-                .filter({$0.activationState == .foregroundActive})
-                .map({$0 as? UIWindowScene})
-                .compactMap({$0})
-                .first?.windows
-                .filter({$0.isKeyWindow}).first
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .filter { $0.activationState == .foregroundActive }
+            let windows = scenes.flatMap { $0.windows }.filter { $0.isKeyWindow }
+            // A global API cannot disambiguate multiple active windows.
+            if windows.count == 1 { return windows.first }
+            if !UIApplication.shared.connectedScenes.isEmpty { return nil }
         }
-        
-        if window == nil {
-            window = UIApplication.shared.windows.first { $0.isKeyWindow }
-            if window == nil {
-                window = UIApplication.shared.keyWindow
-            }
-        }
-        
-        if window == nil {
-            window = UIApplication.shared.delegate?.window ?? nil
-        }
-        
-        return window
+        return UIApplication.shared.windows.first { $0.isKeyWindow }
+            ?? (UIApplication.shared.delegate?.window ?? nil)
     }
     
     public static func safeAreaInsertsForDeviceWithNotch() -> UIEdgeInsets {
-        if !isNotchedScreen {
-            return .zero
-        }
-        
-        if isIPad {
-            return UIEdgeInsets(top: 24, left: 0, bottom: 20, right: 0)
-        }
-        
-        let dict = [
-            // iPhone 16 Pro
-            "iPhone17,1": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
-            "iPhone17,1-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 51, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
-            // iPhone 16 Pro Max
-            "iPhone17,2": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
-            "iPhone17,2-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 54, left: 0, bottom: 31, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)],
-            // iPhone 16
-            "iPhone17,3": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            "iPhone17,3-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 60, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            // iPhone 16 Plus
-            "iPhone17,4": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            "iPhone17,4-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 53, left: 0, bottom: 30, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            // iPhone 15
-            "iPhone15,4": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone15,4-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 48, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 48, bottom: 21, right: 48)],
-            // iPhone 15 Plus
-            "iPhone15,5": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone15,5-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 41, left: 0, bottom: 30, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 41, bottom: 21, right: 41)],
-            // iPhone 15 Pro
-            "iPhone16,1": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            "iPhone16,1-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 48, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 48, bottom: 21, right: 48)],
-            // iPhone 15 Pro Max
-            "iPhone16,2": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            "iPhone16,2-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 51, left: 0, bottom: 31, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 51, bottom: 21, right: 51)],
-            // iPhone 14
-            "iPhone14,7": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone14,7-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 48, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 48, bottom: 21, right: 48)],
-            // iPhone 14 Plus
-            "iPhone14,8": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone14,8-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 41, left: 0, bottom: 30, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 41, bottom: 21, right: 41)],
-            // iPhone 14 Pro
-            "iPhone15,2": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            "iPhone15,2-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 48, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 48, bottom: 21, right: 48)],
-            // iPhone 14 Pro Max
-            "iPhone15,3": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59)],
-            "iPhone15,3-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 51, left: 0, bottom: 31, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 51, bottom: 21, right: 51)],
-            // iPhone 13 mini
-            "iPhone14,4": [UIInterfaceOrientation.portrait : UIEdgeInsets(top: 50, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 50, bottom: 21, right: 50)],
-            "iPhone14,4-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 43, left: 0, bottom: 29, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 43, bottom: 21, right: 43)],
-            // iPhone 13
-            "iPhone14,5": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone14,5-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 39, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 39, bottom: 2, right: 39)],
-            // iPhone 13 Pro
-            "iPhone14,2": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                            UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone14,2-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 39, left: 0, bottom: 28, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 39, bottom: 21, right: 39)],
-            // iPhone 13 Pro Max
-            "iPhone14,3": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone14,3-Zoom": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 41, left: 0, bottom: 29 + 2.0 / 3.0, right: 0),
-                                UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 41, bottom: 21, right: 41)],
-            // iPhone 12 mini
-            "iPhone13,1": [UIInterfaceOrientation.portrait: UIEdgeInsets(top: 50, left: 0, bottom: 34, right: 0),
-                           UIInterfaceOrientation.landscapeLeft: UIEdgeInsets(top: 0, left: 50, bottom: 21, right: 50)],
-            "iPhone13,1-Zoom": [.portrait: UIEdgeInsets(top: 43, left: 0, bottom: 29, right: 0),
-                                .landscapeLeft: UIEdgeInsets(top: 0, left: 43, bottom: 21, right: 43)],
-            // iPhone 12
-            "iPhone13,2": [.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           .landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone13,2-Zoom": [.portrait: UIEdgeInsets(top: 39, left: 0, bottom: 28, right: 0),
-                                .landscapeLeft: UIEdgeInsets(top: 0, left: 39, bottom: 21, right: 39)],
-            // iPhone 12 Pro
-            "iPhone13,3": [.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           .landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone13,3-Zoom": [.portrait: UIEdgeInsets(top: 39, left: 0, bottom: 28, right: 0),
-                                .landscapeLeft: UIEdgeInsets(top: 0, left: 39, bottom: 21, right: 39)],
-            // iPhone 12 Pro Max
-            "iPhone13,4": [.portrait: UIEdgeInsets(top: 47, left: 0, bottom: 34, right: 0),
-                           .landscapeLeft: UIEdgeInsets(top: 0, left: 47, bottom: 21, right: 47)],
-            "iPhone13,4-Zoom": [.portrait: UIEdgeInsets(top: 41, left: 0, bottom: 29 + 2.0 / 3.0, right: 0),
-                                .landscapeLeft: UIEdgeInsets(top: 0, left: 41, bottom: 21, right: 41)],
-            // iPhone 11
-            "iPhone12,1": [.portrait: UIEdgeInsets(top: 48, left: 0, bottom: 34, right: 0),
-                           .landscapeLeft: UIEdgeInsets(top: 0, left: 48, bottom: 21, right: 48)],
-            "iPhone12,1-Zoom": [.portrait: UIEdgeInsets(top: 44, left: 0, bottom: 31, right: 0),
-                                .landscapeLeft: UIEdgeInsets(top: 0, left: 44, bottom: 21, right: 44)],
-            // iPhone 11 Pro Max
-            "iPhone12,5": [.portrait: UIEdgeInsets(top: 44, left: 0, bottom: 34, right: 0),
-                           .landscapeLeft: UIEdgeInsets(top: 0, left: 44, bottom: 21, right: 44)],
-            "iPhone12,5-Zoom": [.portrait: UIEdgeInsets(top: 40, left: 0, bottom: 30 + 2.0 / 3.0, right: 0),
-                                .landscapeLeft: UIEdgeInsets(top: 0, left: 40, bottom: 21, right: 40)]
-        ]
-        var deviceKey = deviceModel
-        if dict[deviceKey] == nil {
-            deviceKey = "iPhone15,2" // 默认按最新的机型处理，因为新出的设备肯定更大概率与上一代设备相似
-        }
-        if isZoomedMode() {
-            deviceKey = deviceKey + "-Zoom"
-        }
-        
-        var orientationKey = UIInterfaceOrientation.unknown
-        let orientation = UIApplication.shared.statusBarOrientation
-        switch orientation {
-        case .landscapeLeft:
-            orientationKey = .landscapeLeft
-            break
-        case .landscapeRight:
-            orientationKey = .landscapeLeft
-            break
-        default:
-            orientationKey = .portrait
-        }
-        
-        let value = dict[deviceKey]
-        var insets = value![orientationKey]!
-        if orientation == .portraitUpsideDown {
-            insets = UIEdgeInsets(top: insets.bottom, left: insets.left, bottom: insets.top, right: insets.right)
-        }else if orientation == .landscapeRight {
-            insets = UIEdgeInsets(top: insets.top, left: insets.right, bottom: insets.bottom, right: insets.left)
-        }
-        return insets
+        return safeAreaInsets()
     }
+
 }
 
 extension UIDevice {
@@ -908,85 +651,96 @@ extension UIDevice {
        return Double(UIDevice.current.systemVersion) ?? 0
     }()
     
-    public static let width: CGFloat = {
-        min(UIScreen.main.bounds.size.width, UIScreen.main.bounds.size.height)
-    }()
+    /// Current window's short edge; zero before a window is available.
+    public static var width: CGFloat {
+        let size = keyWindow()?.bounds.size ?? .zero
+        return min(size.width, size.height)
+    }
     
-    public static let height: CGFloat = {
-        max(UIScreen.main.bounds.size.width, UIScreen.main.bounds.size.height)
-    }()
+    public static var height: CGFloat {
+        let size = keyWindow()?.bounds.size ?? .zero
+        return max(size.width, size.height)
+    }
     
+    // Legacy device classification only. Never use these cached values for current layout.
+    private static var legacyScreenWidth: CGFloat {
+        return min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+    }
+    private static var legacyScreenHeight: CGFloat {
+        return max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+    }
+
     // MARK - Screen
     /// iPhone 16 Pro Max
     public static let is69InchScreen: Bool = {
-        return width == _69Inch.width && height == _69Inch.height
+        return legacyScreenWidth == _69Inch.width && legacyScreenHeight == _69Inch.height
     }()
     
     /// iPhone 14 Pro Max
     public static let is67InchScreenAndiPhone14Later: Bool = {
-        return width == _67InchAndiPhone14Later.width && height == _67InchAndiPhone14Later.height
+        return legacyScreenWidth == _67InchAndiPhone14Later.width && legacyScreenHeight == _67InchAndiPhone14Later.height
     }()
     
     /// iPhone 12 Pro Max
     public static let is67InchScreen: Bool = {
-        return width == _67Inch.width && height == _67Inch.height
+        return legacyScreenWidth == _67Inch.width && legacyScreenHeight == _67Inch.height
     }()
     
     /// iPhone XS Max / 11 Pro Max
     public static let is65InchScreen: Bool = {
         // 由于 iPhone XS Max、iPhone 11 Pro Max 这两款机型和 iPhone XR 的屏幕宽高是一致的，我们通过机器的 Identifier 加以区别
-        return (width == _65Inch.width && height == _65Inch.height && (deviceModel == "iPhone11,4" || deviceModel == "iPhone11,6" || deviceModel == "iPhone12,5"))
+        return (legacyScreenWidth == _65Inch.width && legacyScreenHeight == _65Inch.height && (deviceModel == "iPhone11,4" || deviceModel == "iPhone11,6" || deviceModel == "iPhone12,5"))
     }()
     
     /// iPhone 16 Pro
     public static let is63InchScreen: Bool = {
-        return width == _63Inch.width && height == _63Inch.height
+        return legacyScreenWidth == _63Inch.width && legacyScreenHeight == _63Inch.height
     }()
     
     /// iPhone 14 Pro / 15 Pro
     public static let is61InchScreenAndiPhone14ProLater: Bool = {
-        return width == _61InchAndiPhone14ProLater.width && height == _61InchAndiPhone14ProLater.height
+        return legacyScreenWidth == _61InchAndiPhone14ProLater.width && legacyScreenHeight == _61InchAndiPhone14ProLater.height
     }()
     
     /// iPhone 12 / 12 Pro
     public static let is61InchScreenAndiPhone12Later: Bool = {
-        return width == _61InchAndiPhone12Later.width && height == _61InchAndiPhone12Later.height
+        return legacyScreenWidth == _61InchAndiPhone12Later.width && legacyScreenHeight == _61InchAndiPhone12Later.height
     }()
     
     /// iPhone XR / 11
     public static let is61InchScreen: Bool = {
-        return (width == _61Inch.width && height == _61Inch.height && (deviceModel == "iPhone11,8" || deviceModel == "iPhone12,1"))
+        return (legacyScreenWidth == _61Inch.width && legacyScreenHeight == _61Inch.height && (deviceModel == "iPhone11,8" || deviceModel == "iPhone12,1"))
     }()
     
     /// iPhone X / XS / 11 Pro
     public static let is58InchScreen: Bool = {
         // iPhone XS 和 iPhone X 的物理尺寸是一致的，因此无需比较机器 Identifier
-        return width == _58Inch.width && height == _58Inch.height
+        return legacyScreenWidth == _58Inch.width && legacyScreenHeight == _58Inch.height
     }()
     
     /// iPhone 6，6s，7，8 Plus
     public static let is55InchScreen: Bool = {
-        return width == _55Inch.width && height == _55Inch.height
+        return legacyScreenWidth == _55Inch.width && legacyScreenHeight == _55Inch.height
     }()
     
     /// iPhone 12 mini
     public static let is54InchScreen: Bool = {
-        return width == _54Inch.width && height == _54Inch.height
+        return legacyScreenWidth == _54Inch.width && legacyScreenHeight == _54Inch.height
     }()
     
     /// iPhone 6，6s，7，8，SE2
     public static let is47InchScreen: Bool = {
-        return width == _47Inch.width && height == _47Inch.height
+        return legacyScreenWidth == _47Inch.width && legacyScreenHeight == _47Inch.height
     }()
     
     /// iPhone 5，5s，5c，SE
     public static let is40InchScreen: Bool = {
-        return width == _40Inch.width && height == _40Inch.height
+        return legacyScreenWidth == _40Inch.width && legacyScreenHeight == _40Inch.height
     }()
     
     /// iPhone 4
     public static let is35InchScreen: Bool = {
-        return width == _35Inch.width && height == _35Inch.height
+        return legacyScreenWidth == _35Inch.width && legacyScreenHeight == _35Inch.height
     }()
     
     public static let _69Inch: CGSize = {

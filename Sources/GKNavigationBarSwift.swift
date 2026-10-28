@@ -62,6 +62,33 @@ open class GKNavigationBar: UINavigationBar {
         fatalError("init(coder:) has not been implemented")
     }
     
+    // Query UIKit on every layout, using this bar's traits and its container width.
+    func gk_contentHeight(for size: CGSize) -> CGFloat {
+        return sizeThatFits(CGSize(width: size.width, height: 0)).height
+    }
+
+    func gk_layoutFrame(in view: UIView) -> CGRect {
+        return CGRect(x: view.bounds.minX, y: view.bounds.minY,
+                      width: view.bounds.width,
+                      height: Self.topInset(in: view) + gk_contentHeight(for: view.bounds.size))
+    }
+
+    static func topInset(in view: UIView) -> CGFloat {
+        guard let window = view.window else { return 0 }
+        if #available(iOS 11.0, *) {
+            let safeTop = window.convert(CGPoint(x: 0, y: window.bounds.minY + window.safeAreaInsets.top), to: view).y
+            return min(view.bounds.height, max(0, safeTop - view.bounds.minY))
+        }
+        let status = window.convert(UIApplication.shared.statusBarFrame, from: nil)
+        return max(0, view.convert(status, from: window).maxY - view.bounds.minY)
+    }
+
+    @available(iOS 11.0, *)
+    open override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        viewController?.view.setNeedsLayout()
+    }
+
     open override func layoutSubviews() {
         super.layoutSubviews()
         
@@ -74,21 +101,10 @@ open class GKNavigationBar: UINavigationBar {
                         frame.size.height = self.frame.size.height
                         obj.frame = frame
                     }else {
-                        let navBarHNFS = UIDevice.navBarHeightNonFullScreen()
-                        var navBarH = UIDevice.navBarHeight()
-                        if UIDevice.isLandScape() {
-                            if let vc = viewController, vc.gk_isLandscape() {
-                                navBarH = UIDevice.navBarHeight()
-                            }else {
-                                navBarH = UIDevice.navBarHeightForPortrait()
-                            }
-                        }
-                        if let vc = viewController, vc.supportedInterfaceOrientations.contains(.landscape) {
-                            navBarH = UIDevice.navBarHeightForPortrait()
-                        }
-                        
+                        let navBarH = gk_contentHeight(for: viewController?.view.bounds.size ?? bounds.size)
+
                         var frame = obj.frame
-                        frame.origin.y = self.frame.size.height - (self.gk_nonFullScreen ? navBarHNFS : navBarH)
+                        frame.origin.y = self.frame.size.height - navBarH
                         obj.frame = frame
                     }
                 }
