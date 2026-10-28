@@ -171,24 +171,19 @@ open class GKNavigationBarConfigure : NSObject {
         return UIDevice.keyWindow()?.rootViewController?.gk_findCurrentViewController(true)
     }
     
-    /// 获取当前item修复间距
+    /// Current UIKit margin. No device model or width threshold predicts spacing.
     open func gk_fixedSpace() -> CGFloat {
-        // 经测试发现iPhone 12 和 12 Pro 到 16 和 16 Pro，默认导航栏间距都是16，所以做下处理
-        // 12 / 13 / 14 / 12 Pro / 13 Pro
-        if (UIDevice.is61InchScreenAndiPhone12Later) {
-            return 16;
-        }
-        // 14 Pro / 15 / 16 / 15 Pro
-        if (UIDevice.is61InchScreenAndiPhone14ProLater) {
-            return 16;
-        }
-        // 16 Pro
-        if (UIDevice.is63InchScreen) {
-            return 16;
-        }
-        return UIDevice.width > 375.0 ? 20 : 16
+        guard let controller = visibleViewController() else { return 0 }
+        let bar = controller.viewIfLoaded?.subviews.compactMap { $0 as? UINavigationBar }.first
+            ?? controller.navigationController?.navigationBar
+        guard let view = bar else { return 0 }
+        return gk_fixedSpace(in: view)
     }
-    
+
+    open func gk_fixedSpace(in view: UIView, trailing: Bool = false) -> CGFloat {
+        return trailing ? view.layoutMargins.right : view.layoutMargins.left
+    }
+
     open func fixNavItemSpaceDisabled() -> Bool {
         return self.gk_disableFixSpace && !self.gk_openSystemFixSpace
     }
@@ -452,19 +447,18 @@ extension UIDevice {
         return name
     }()
     
+    /// Legacy screen-scale diagnostic, not a layout or device classifier.
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
     public static func isZoomedMode() -> Bool {
-        if !isIPhone { return false }
-        let nativeScale = UIScreen.main.nativeScale
-        var scale = UIScreen.main.scale
-        
-        // 对于所有的Plus系列iPhone，屏幕物理像素低于软件层面的渲染像素，不管标准模式还是放大模式，nativeScale均小于scale，所以需要特殊处理才能准确区分放大模式
-        let shouldBeDownsampledDevice = __CGSizeEqualToSize(UIScreen.main.nativeBounds.size, CGSize(width: 1080, height: 1920))
-        if shouldBeDownsampledDevice {
-            scale /= 1.15
-        }
-        return nativeScale > scale
+        guard let screen = currentScreen() else { return false }
+        return screen.nativeScale > screen.scale
     }
-    
+
+    private static func currentScreen() -> UIScreen? {
+        if #available(iOS 13.0, *) { return keyWindow()?.windowScene?.screen }
+        return keyWindow()?.screen
+    }
+
     public static let isIPad: Bool = {
         return UIDevice.current.userInterfaceIdiom == .pad
     }()
@@ -515,24 +509,31 @@ extension UIDevice {
     //"iPhone17,2" : "iPhone 16 Pro Max",
     //"iPhone17,3" : "iPhone 16",
     //"iPhone17,4" : "iPhone 16 Plus",
+    @available(*, deprecated, message: "Device identity does not describe current layout or safe area.")
     public static func isDynamicIslandScreen() -> Bool {
         if !isIPhone { return false }
         let models = ["iPhone 14 Pro", "iPhone 15", "iPhone 16"]
         return models.contains { deviceName.hasPrefix($0) }
     }
     
-    /// 将屏幕分为普通和紧凑两种，这个方法用于判断普通屏幕（也即大屏幕）
+    /// Current layout traits; regular width does not identify a device model.
     public static func isRegularScreen() -> Bool {
-        if isDynamicIslandScreen() { return true }
-        return isIPad || (!isZoomedMode() && (is67InchScreenAndiPhone14Later || is67InchScreen || is65InchScreen || is61InchScreen || is55InchScreen))
+        return keyWindow()?.traitCollection.horizontalSizeClass == .regular
     }
-    
-    /// 是否是横屏
+
+    public static func isRegularScreen(in view: UIView) -> Bool {
+        return view.traitCollection.horizontalSizeClass == .regular
+    }
+
     public static func isLandScape() -> Bool {
         guard let window = keyWindow() else { return false }
-        return window.bounds.width > window.bounds.height
+        return isLandScape(in: window)
     }
-    
+
+    public static func isLandScape(in view: UIView) -> Bool {
+        return view.bounds.width > view.bounds.height
+    }
+
     public static func statusBarNavBarHeight() -> CGFloat {
         return navBarFullHeight()
     }
@@ -663,86 +664,102 @@ extension UIDevice {
         return max(size.width, size.height)
     }
     
-    // Legacy device classification only. Never use these cached values for current layout.
+    // Legacy screen catalog only, re-read from the current scene. Not layout breakpoints.
     private static var legacyScreenWidth: CGFloat {
-        return min(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+        let size = currentScreen()?.bounds.size ?? .zero
+        return min(size.width, size.height)
     }
     private static var legacyScreenHeight: CGFloat {
-        return max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+        let size = currentScreen()?.bounds.size ?? .zero
+        return max(size.width, size.height)
     }
 
     // MARK - Screen
     /// iPhone 16 Pro Max
-    public static let is69InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is69InchScreen: Bool {
         return legacyScreenWidth == _69Inch.width && legacyScreenHeight == _69Inch.height
-    }()
+    }
     
     /// iPhone 14 Pro Max
-    public static let is67InchScreenAndiPhone14Later: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is67InchScreenAndiPhone14Later: Bool {
         return legacyScreenWidth == _67InchAndiPhone14Later.width && legacyScreenHeight == _67InchAndiPhone14Later.height
-    }()
+    }
     
     /// iPhone 12 Pro Max
-    public static let is67InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is67InchScreen: Bool {
         return legacyScreenWidth == _67Inch.width && legacyScreenHeight == _67Inch.height
-    }()
+    }
     
     /// iPhone XS Max / 11 Pro Max
-    public static let is65InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is65InchScreen: Bool {
         // 由于 iPhone XS Max、iPhone 11 Pro Max 这两款机型和 iPhone XR 的屏幕宽高是一致的，我们通过机器的 Identifier 加以区别
         return (legacyScreenWidth == _65Inch.width && legacyScreenHeight == _65Inch.height && (deviceModel == "iPhone11,4" || deviceModel == "iPhone11,6" || deviceModel == "iPhone12,5"))
-    }()
+    }
     
     /// iPhone 16 Pro
-    public static let is63InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is63InchScreen: Bool {
         return legacyScreenWidth == _63Inch.width && legacyScreenHeight == _63Inch.height
-    }()
+    }
     
     /// iPhone 14 Pro / 15 Pro
-    public static let is61InchScreenAndiPhone14ProLater: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is61InchScreenAndiPhone14ProLater: Bool {
         return legacyScreenWidth == _61InchAndiPhone14ProLater.width && legacyScreenHeight == _61InchAndiPhone14ProLater.height
-    }()
+    }
     
     /// iPhone 12 / 12 Pro
-    public static let is61InchScreenAndiPhone12Later: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is61InchScreenAndiPhone12Later: Bool {
         return legacyScreenWidth == _61InchAndiPhone12Later.width && legacyScreenHeight == _61InchAndiPhone12Later.height
-    }()
+    }
     
     /// iPhone XR / 11
-    public static let is61InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is61InchScreen: Bool {
         return (legacyScreenWidth == _61Inch.width && legacyScreenHeight == _61Inch.height && (deviceModel == "iPhone11,8" || deviceModel == "iPhone12,1"))
-    }()
+    }
     
     /// iPhone X / XS / 11 Pro
-    public static let is58InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is58InchScreen: Bool {
         // iPhone XS 和 iPhone X 的物理尺寸是一致的，因此无需比较机器 Identifier
         return legacyScreenWidth == _58Inch.width && legacyScreenHeight == _58Inch.height
-    }()
+    }
     
     /// iPhone 6，6s，7，8 Plus
-    public static let is55InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is55InchScreen: Bool {
         return legacyScreenWidth == _55Inch.width && legacyScreenHeight == _55Inch.height
-    }()
+    }
     
     /// iPhone 12 mini
-    public static let is54InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is54InchScreen: Bool {
         return legacyScreenWidth == _54Inch.width && legacyScreenHeight == _54Inch.height
-    }()
+    }
     
     /// iPhone 6，6s，7，8，SE2
-    public static let is47InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is47InchScreen: Bool {
         return legacyScreenWidth == _47Inch.width && legacyScreenHeight == _47Inch.height
-    }()
+    }
     
     /// iPhone 5，5s，5c，SE
-    public static let is40InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is40InchScreen: Bool {
         return legacyScreenWidth == _40Inch.width && legacyScreenHeight == _40Inch.height
-    }()
+    }
     
     /// iPhone 4
-    public static let is35InchScreen: Bool = {
+    @available(*, deprecated, message: "Use current view bounds and traits for layout.")
+    public static var is35InchScreen: Bool {
         return legacyScreenWidth == _35Inch.width && legacyScreenHeight == _35Inch.height
-    }()
+    }
     
     public static let _69Inch: CGSize = {
         return CGSize(width: 440, height: 956)

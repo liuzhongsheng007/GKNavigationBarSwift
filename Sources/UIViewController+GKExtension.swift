@@ -875,14 +875,10 @@ extension UIViewController {
     }
     
     public func gk_isLandscape() -> Bool {
-        // 当前控制器支持横屏
-        if supportedInterfaceOrientations.contains(.landscape) {
-            return true
-        }
-        // 当前控制器是横屏状态
-        return view.frame.width > view.frame.height
+        guard let view = viewIfLoaded else { return false }
+        return UIDevice.isLandScape(in: view)
     }
-    
+
     fileprivate func setBackItemImage(image: UIImage?) {
         if self.gk_navBarInit == false { return }
         // 根控制器不作处理

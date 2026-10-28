@@ -152,6 +152,36 @@ final class GKNavigationBarSwiftTests: XCTestCase {
         XCTAssertTrue(controller.gk_navigationItem === controller.navigationItem)
     }
 
+    func testItemSpacingReadsOwningViewsCurrentMargins() {
+        let first = UIView()
+        let second = UIView()
+        let configure = GKNavigationBarConfigure()
+        first.layoutMargins = UIEdgeInsets(top: 0, left: 13, bottom: 0, right: 29)
+        second.layoutMargins = UIEdgeInsets(top: 0, left: 7, bottom: 0, right: 31)
+        XCTAssertEqual(configure.gk_fixedSpace(in: first), 13)
+        XCTAssertEqual(configure.gk_fixedSpace(in: first, trailing: true), 29)
+        XCTAssertEqual(configure.gk_fixedSpace(in: second), 7)
+        first.layoutMargins.left = 23
+        XCTAssertEqual(configure.gk_fixedSpace(in: first), 23)
+        XCTAssertEqual(configure.gk_fixedSpace(in: second, trailing: true), 31)
+    }
+
+    func testLayoutShapeIgnoresSupportedOrientationsAndUpdatesWithoutRotation() {
+        final class LandscapeSupportedController: UIViewController {
+            override var supportedInterfaceOrientations: UIInterfaceOrientationMask { return .landscape }
+        }
+        let controller = LandscapeSupportedController()
+        XCTAssertFalse(controller.gk_isLandscape())
+        XCTAssertFalse(controller.isViewLoaded)
+        controller.view = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 800))
+        XCTAssertFalse(controller.gk_isLandscape())
+        for size in [CGSize(width: 800, height: 320), CGSize(width: 400, height: 800), CGSize(width: 500, height: 500)] {
+            controller.view.bounds.size = size
+            XCTAssertEqual(controller.gk_isLandscape(), size.width > size.height)
+            XCTAssertEqual(UIDevice.isLandScape(in: controller.view), size.width > size.height)
+        }
+    }
+
     func testBarSizingReadsCurrentContainerWidth() {
         final class SizingBar: GKNavigationBar {
             override func sizeThatFits(_ size: CGSize) -> CGSize {

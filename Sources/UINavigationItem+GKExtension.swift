@@ -9,78 +9,8 @@
 import UIKit
 
 extension UINavigationItem: GKAwakeProtocol {
-    // MARK: - 重新系统方法
-    private static let onceToken = UUID().uuidString
     @objc public static func gkAwake() {
-        DispatchQueue.once(token: onceToken) {
-            if #available(iOS 11.0, *) {} else {
-                let oriSels = ["setLeftBarButtonItem:animated:",
-                               "setLeftBarButtonItems:animated:",
-                               "setRightBarButtonItem:animated:",
-                               "setRightBarButtonItems:animated:"]
-                
-                for oriSel in oriSels {
-                    gk_swizzled_instanceMethod("gk", oldClass: self, oldSelector: oriSel, newClass: self)
-                }
-            }
-        }
-    }
-    
-    @objc func gk_setLeftBarButtonItem(_ item: UIBarButtonItem?, animated: Bool) {
-        if !GKConfigure.fixNavItemSpaceDisabled() && item != nil { // 存在按钮且需要调节
-            self.setLeftBarButtonItems([item!], animated: animated)
-        }else { // 不存在按钮或者不需要调节
-            self.setLeftBarButtonItems(nil, animated: false)
-            self.gk_setLeftBarButtonItem(item, animated: animated)
-        }
-    }
-    
-    @objc func gk_setLeftBarButtonItems(_ items: [UIBarButtonItem]?, animated: Bool) {
-        guard var leftItems = items else { return }
-        
-        if !GKConfigure.fixNavItemSpaceDisabled() && leftItems.count > 0 {
-            let firstItem = leftItems.first!
-            let width = GKConfigure.gk_navItemLeftSpace - GKConfigure.gk_fixedSpace()
-            if firstItem.width == width {
-                self.gk_setLeftBarButtonItems(leftItems, animated: animated)
-            }else {
-                leftItems.insert(fixedSpace(width), at: 0)
-                self.gk_setLeftBarButtonItems(leftItems, animated: animated)
-            }
-        }else {
-            self.gk_setLeftBarButtonItems(leftItems, animated: animated)
-        }
-    }
-    
-    @objc func gk_setRightBarButtonItem(_ item: UIBarButtonItem?, animated: Bool) {
-        if !GKConfigure.fixNavItemSpaceDisabled() && item != nil {
-            self.setRightBarButtonItems([item!], animated: animated)
-        }else {
-            self.setRightBarButtonItems(nil, animated: false)
-            self.gk_setRightBarButtonItem(item, animated: animated)
-        }
-    }
-    
-    @objc func gk_setRightBarButtonItems(_ items: [UIBarButtonItem]?, animated: Bool) {
-        guard var rightItems = items else { return }
-        if !GKConfigure.fixNavItemSpaceDisabled() && rightItems.count > 0 {
-            let firstItem = rightItems.first!
-            let width = GKConfigure.gk_navItemRightSpace - GKConfigure.gk_fixedSpace()
-            if firstItem.width == width {
-                self.gk_setRightBarButtonItems(items, animated: animated)
-            }else {
-                rightItems.insert(fixedSpace(width), at: 0)
-                self.gk_setRightBarButtonItems(rightItems, animated: animated)
-            }
-        }else {
-            self.gk_setRightBarButtonItems(rightItems, animated: animated);
-        }
-    }
-    
-    fileprivate func fixedSpace(_ width: CGFloat) -> UIBarButtonItem {
-        let fixedItem = UIBarButtonItem(barButtonSystemItem: .fixedSpace, target: nil, action: nil)
-        fixedItem.width = width
-        return fixedItem
+        // UIKit owns spacing on systems where an item has no owning-view context.
     }
 }
 
@@ -129,13 +59,27 @@ extension NSObject: GKObjectAwakeProtocol {
         }
     }
     
+    private func gk_owningBar(for constraints: [NSLayoutConstraint]) -> UINavigationBar? {
+        for constraint in constraints {
+            for item in [constraint.firstItem, constraint.secondItem] {
+                var view = item as? UIView
+                while let current = view {
+                    if let bar = current as? UINavigationBar { return bar }
+                    view = current.superview
+                }
+            }
+        }
+        return nil
+    }
+
     fileprivate func gk_adjustLeadingBarConstraints() {
         if GKConfigure.fixNavItemSpaceDisabled() { return }
         
         let leadingBarConstrainst: [NSLayoutConstraint]? = self.value(forKey: "_leadingBarConstraints") as? [NSLayoutConstraint]
         if leadingBarConstrainst == nil { return }
         
-        let constant = GKConfigure.gk_navItemLeftSpace - GKConfigure.gk_fixedSpace()
+        guard let bar = gk_owningBar(for: leadingBarConstrainst!) else { return }
+        let constant = GKConfigure.gk_navItemLeftSpace - GKConfigure.gk_fixedSpace(in: bar)
         
         for constraint in leadingBarConstrainst! {
             if constraint.firstAttribute == .leading && constraint.secondAttribute == .leading {
@@ -150,7 +94,8 @@ extension NSObject: GKObjectAwakeProtocol {
         let trailingBarConstraints: [NSLayoutConstraint]? = self.value(forKey: "_trailingBarConstraints") as? [NSLayoutConstraint]
         if trailingBarConstraints == nil { return }
         
-        let constant = GKConfigure.gk_fixedSpace() - GKConfigure.gk_navItemRightSpace
+        guard let bar = gk_owningBar(for: trailingBarConstraints!) else { return }
+        let constant = GKConfigure.gk_fixedSpace(in: bar, trailing: true) - GKConfigure.gk_navItemRightSpace
         
         for constraint in trailingBarConstraints! {
             if constraint.firstAttribute == .trailing && constraint.secondAttribute == .trailing {

@@ -2,7 +2,7 @@
 
 Base: master a411b9b. Scope: custom navigation bar sizing, owning-window safe top inset,
 uncached compatibility dimensions, safe-area and scene lookup. Existing singleton and
-physical device identity caches remain. No CI redesign or deployment-target increase.
+physical device identity caches remain; screen-dependent classifications are recomputed. No CI redesign or deployment-target increase.
 
 ## Behavior and compatibility
 
@@ -61,7 +61,7 @@ physical device identity caches remain. No CI redesign or deployment-target incr
   supported OS, including iPad and dynamic status bar changes.
 - P1: legacy context-free APIs cannot identify an intended scene when several are active;
   returning nil/zero intentionally replaces arbitrary cross-scene selection.
-- P2: remaining legacy device classification, item spacing heuristics, and external clients of
+- P2: remaining legacy device classification and external clients of
   old height helpers need a separate migration if acceptance exposes issues.
 
 Reference: https://developer.apple.com/iphone-duo/prepare/ (read 2026-10-28).
@@ -104,3 +104,24 @@ vertical axis: https://developer.apple.com/documentation/uikit/uinavigationbar
   and side-safe bounds including containers already inside the safe area.
 - Remaining: run compilation/XCTest and Device Hub acceptance. No device-specific or
   orientation-based vertical geometry is fabricated in this implementation.
+
+## Final layout dependency cleanup
+
+- Item margin correction reads the owning bar's live layoutMargins (separate left/right),
+  never a 375pt threshold, model list, or different scene. If private legacy constraints
+  cannot identify their bar, they are left to UIKit. The context-free gk_fixedSpace API
+  delegates to an existing visible bar and returns zero when none is identifiable.
+- Old item-only swizzles have been removed: those callbacks cannot resolve an owning
+  view and must not inject spacers from a global key window. UIKit's default spacing
+  is preserved on iOS 9/10; legacy custom spacing there is no longer injected.
+- gk_isLandscape and the contextual UIDevice helper compare current bounds only;
+  supporting landscape orientations does not make a tall view landscape.
+- isRegularScreen now reports current horizontal size class rather than model/idiom.
+- All screen-dependent catalog flags are uncached, deprecated compatibility diagnostics.
+  They read the current scene's screen; no UIScreen.main remains in Sources. The
+  catalog constants are intentionally retained as reference dimensions, not breakpoints.
+- isZoomedMode is deprecated and reports a native/render scale comparison using the
+  current scene screen. The old Plus-specific 1080x1920/1.15 heuristic is removed;
+  it is not a reliable zoom-mode detector on downsampled displays and must not drive layout.
+- Added margin-update/owner-isolation and bounds-vs-supported-orientation regressions.
+  XCTest now has 11 test methods. None have been executed in this Linux environment.
