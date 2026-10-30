@@ -53,6 +53,13 @@ extension UIViewController: GKAwakeProtocol {
             gk_setAssociatedObject(self, &AssociatedKeys.gkNavBarAlpha, newValue)
             
             self.gk_navigationBar.gk_navBarBackgroundAlpha = newValue
+            if self.gk_navigationBar.usesSystemLayout {
+                if let image = self.gk_navBackgroundImage {
+                    setNavBackground(image)
+                } else {
+                    setNavBackground(nil, color: self.gk_navBackgroundColor)
+                }
+            }
         }
     }
     
@@ -931,8 +938,10 @@ extension UIViewController {
             let shadowColor = appearance.shadowColor
             let shadowImage = appearance.shadowImage
             appearance.configureWithTransparentBackground()
-            appearance.backgroundImage = image
-            appearance.backgroundColor = color
+            // A transparent system-region bar must not retain an opaque appearance fill.
+            let hidesBackground = gk_navigationBar.usesSystemLayout && gk_navBarAlpha == 0
+            appearance.backgroundImage = hidesBackground ? nil : image
+            appearance.backgroundColor = hidesBackground ? .clear : color
             appearance.shadowColor = shadowColor
             appearance.shadowImage = shadowImage
             gk_navigationBar.standardAppearance = appearance
