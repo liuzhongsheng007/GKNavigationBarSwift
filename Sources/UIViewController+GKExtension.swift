@@ -765,6 +765,20 @@ extension UIViewController {
     }
     
     fileprivate func setupNavBarFrame() {
+        if let provider = GKConfigure.layoutGuideProvider,
+           let guide = provider(self, self.gk_navigationBar), guide.owningView === self.view {
+            // UIKit owns item margins within the supplied region, without legacy screen-width offsets.
+            self.gk_disableFixNavItemSpace = true
+            self.gk_openFixNavItemSpace = false
+            if self.gk_navigationBar.superview !== self.view {
+                self.view.addSubview(self.gk_navigationBar)
+                self.gk_navBarAdded = true
+            }
+            self.gk_navigationBar.setSystemLayoutGuide(guide)
+            self.gk_navigationBar.gk_statusBarHidden = self.gk_statusBarHidden
+            return
+        }
+        self.gk_navigationBar.setSystemLayoutGuide(nil)
         let isNonFullScreen = isNonFullScreen()
         var navBarH: CGFloat = 0.0
         

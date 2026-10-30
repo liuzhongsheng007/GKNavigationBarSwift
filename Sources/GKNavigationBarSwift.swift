@@ -10,6 +10,42 @@ import UIKit
 
 open class GKNavigationBar: UINavigationBar {
 
+    private weak var systemLayoutGuide: UILayoutGuide?
+    private var systemLayoutConstraints: [NSLayoutConstraint] = []
+    private var systemHeightConstraint: NSLayoutConstraint?
+
+    var usesSystemLayout: Bool { return systemLayoutGuide != nil }
+
+    func setSystemLayoutGuide(_ guide: UILayoutGuide?) {
+        guard let guide = guide else {
+            if usesSystemLayout {
+                NSLayoutConstraint.deactivate(systemLayoutConstraints)
+                systemLayoutConstraints = []
+                systemHeightConstraint = nil
+                systemLayoutGuide = nil
+                translatesAutoresizingMaskIntoConstraints = true
+            }
+            return
+        }
+        let contentHeight = sizeThatFits(CGSize(width: superview?.bounds.width ?? bounds.width, height: 0)).height
+        if systemLayoutGuide !== guide {
+            NSLayoutConstraint.deactivate(systemLayoutConstraints)
+            systemLayoutGuide = guide
+            translatesAutoresizingMaskIntoConstraints = false
+            let heightConstraint = heightAnchor.constraint(equalToConstant: contentHeight)
+            systemHeightConstraint = heightConstraint
+            systemLayoutConstraints = [
+                topAnchor.constraint(equalTo: guide.topAnchor),
+                leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+                trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+                heightConstraint
+            ]
+            NSLayoutConstraint.activate(systemLayoutConstraints)
+        } else if systemHeightConstraint?.constant != contentHeight {
+            systemHeightConstraint?.constant = contentHeight
+        }
+    }
+
     /// 导航栏所在的控制器
     public weak var viewController: UIViewController?
     
@@ -71,9 +107,14 @@ open class GKNavigationBar: UINavigationBar {
                 if let cls = NSClassFromString("_UIBarBackground") {
                     if obj.isKind(of: cls) {
                         var frame = obj.frame
-                        frame.size.height = self.frame.size.height
+                        if usesSystemLayout, let host = superview {
+                            // Keep the configured background extending to the host's top edge.
+                            frame = convert(CGRect(x: 0, y: 0, width: host.bounds.width, height: self.frame.maxY), from: host)
+                        } else {
+                            frame.size.height = self.frame.size.height
+                        }
                         obj.frame = frame
-                    }else {
+                    }else if !usesSystemLayout {
                         let navBarHNFS = UIDevice.navBarHeightNonFullScreen()
                         var navBarH = UIDevice.navBarHeight()
                         if UIDevice.isLandScape() {

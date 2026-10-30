@@ -13,6 +13,10 @@ public let GKConfigure = GKNavigationBarConfigure.shared
 // 配置类宏定义
 open class GKNavigationBarConfigure : NSObject {
 
+    /// Supply a content region in the controller's view to opt into system-based layout.
+    /// A nil provider/result preserves the existing layout for other consumers.
+    @objc open var layoutGuideProvider: ((UIViewController, UINavigationBar) -> UILayoutGuide?)?
+
     /// 导航栏背景色
     open var backgroundColor: UIColor?
     
